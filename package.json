@@ -1,0 +1,17 @@
+{
+  "name": "gov-people-money",
+  "version": "1.0.0",
+  "description": "changchiakai",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "s": "nodemon index.js"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.17.1",
+    "nodemon": "^1.19.1",
+    "pdf.js-extract": "^0.1.1"
+  }
+}
