@@ -7,10 +7,22 @@ const pdfExtract = new PDFExtract();
 const options = {}; /* see below */
 
 var TotalData = [];
+// 期別
+var govePdfPeriod = '';
 
-function processPDF() {
 
+function processPDFnew() {
     pdfExtract.extract("./teee.pdf", options, (err, data) => {
+        if (err) return console.log(err);
+
+        getTableOfContents1(data)
+
+        console.log("loadingFinish");
+    });
+}
+function processPDF() {
+    pdfExtract.extract("./test2.pdf", options, (err, data) => {
+        // pdfExtract.extract("./teee.pdf", options, (err, data) => {
         if (err) return console.log(err);
         // console.log(data.pages[0].content);
 
@@ -358,6 +370,7 @@ function sortTypeSeven() {
 
     console.log('-------------------');
     console.log("bankSavingsList:", bankSavingsList);
+
 };
 function sortTypeEight() {
     console.log("處理有價證券1:");
@@ -553,8 +566,13 @@ function getDataWithStringBetween(str1, str2, txt) {
     // console.log("str2:",str2)
     // console.log("txt:",txt)
     // console.log("txt.split(str1)[1]:",txt.split(str1)[1])
+    if (txt.split(str1)[1] == undefined) {
+        // 找不到 去除空白再找找
+        str1 = str1.replace(/\s+/g, "");
+        // console.log("變更後txt:",str1);
+    }
     // console.log("txt.split(str2)[0]:",txt.split(str2)[0])
-    // txt.split(str1)[1]
+    txt.split(str1)[1]
     return txt.split(str1)[1].split(str2)[0].replace(" ", "");
 }
 
@@ -563,6 +581,7 @@ function removeTitleAndPageNum(textObj) {
     let newData = textObj.text;
     for (let i = 0; i < 300; i++) {
         if (textObj.text.indexOf("監察院公報 ............. 廉 政 專 刊 第 " + i.toString() + " 期 ") > 0) {
+
             let deleTitleAndPageNum = textObj.text.split("監察院公報 ............. 廉 政 專 刊 第 " + i.toString() + " 期 ")[1].split(" ");
             //去出頁碼
             deleTitleAndPageNum.shift()
@@ -573,18 +592,18 @@ function removeTitleAndPageNum(textObj) {
 }
 
 function getTableOfContents1(data) {
+    govePdfPeriod = 0;
+    let dataArray = [];
     let stringlist = ""
-    let breakflog = false;
+    let rootPageCount = 0;
     // for(let page =0 ; page<data.pages.length;page++){
     // console.log("data.pages:",data.pages);
-    let countTabPage = 0;
     // 頁數是亂的
     data.pages.sort((a, b) => {
         return a.pageInfo.num - b.pageInfo.num
     })
 
     for (let page = 0; page < data.pages.length; page++) {
-        countTabPage++;
         console.log(data.pages[page].pageInfo.num);
         // 頁數是亂的
         // console.log(data.pages[page].content.length);
@@ -600,9 +619,16 @@ function getTableOfContents1(data) {
             // 移除宣告 108 09 09 會拿不掉
             stringlist = stringlist.split(' 監 察 院')[0];
         }
-        // stringlist=stringlist+"■e■■"+page+"■■■";
+        console.log('stringlist.split("申報人姓名").length:', stringlist.split("申報人姓名").length);
+        if (stringlist.split("申報人姓名").length > 1) {
+            console.log('目錄共:', page, "頁");
+            rootPageCount += page - 1;
+            break;
+        }
+
     }
-    // console.log("stringlist11:",stringlist);
+
+    console.log("rootPageCount:", rootPageCount);
     let allRootNumString = '';
     removeAnotherStringinRoot(stringlist.split("申報人姓名")[0]).replace("◆", "").split('   ').forEach((data) => {
         // console.log("stringList:",data)
@@ -614,34 +640,627 @@ function getTableOfContents1(data) {
     // console.log("allRootNumString:", allRootNumString);
     allRootNumArray = []
     allRootNumString.split('-').forEach((n) => {
-        n < 1000&&n!=='' ? allRootNumArray.push(n) : '';
+        n < 1000 && n !== '' ? allRootNumArray.push(n) : '';
     })
-    // console.log(allRootNumArray.sort((a,b)=>{return a-b}));
-    rootArray=[];
-    allRootNumArray.sort((a,b)=>{return a-b}).forEach((num,index,arr)=>{
-        // 最後不處理
-        let rootNum={
-            startPage:0,
-            endPage:0
+    console.log(allRootNumArray.sort((a, b) => { return a - b }));
+    // 移除只有一頁的資料
+    for (let j = 0; j < allRootNumArray.length - 1; j++) {
+        // 20191209 韓國瑜 150拿不調 目錄要在處理
+        // if (parseInt(allRootNumArray[j]) + 1 == parseInt(allRootNumArray[j + 1])) {
+
+        //     allRootNumArray.splice(j + 1, 1)
+        //     break;
+        // }
+        console.log("有比對到期別:", parseInt(allRootNumArray[j]));
+        console.log("govePdfPeriod:", govePdfPeriod);
+        if (govePdfPeriod == parseInt(allRootNumArray[j])) {
+            console.log("有比對到期別:", parseInt(allRootNumArray[j]));
+            allRootNumArray.splice(j, 1)
+            break;
         }
-        if(index==arr.length-1){
-            rootNum.startPage=parseInt(num);
-            rootNum.endPage=parseInt(num);
-        }else{
-            rootNum.startPage=parseInt(num);
-            rootNum.endPage=arr[index+1]-1;
+
+    }
+    rootArray = [];
+    allRootNumArray.sort((a, b) => { return a - b }).forEach((num, index, arr) => {
+        // 最後不處理
+        let rootNum = {
+            startPage: 0,
+            endPage: 0
+        }
+        // console.log(num);
+        // if((parseInt(num)+1)!==parseInt(arr[index+1])){
+        if (index == arr.length - 1) {
+            rootNum.startPage = parseInt(num) + rootPageCount;
+            rootNum.endPage = parseInt(num) + rootPageCount;
+        } else {
+            rootNum.startPage = parseInt(num) + rootPageCount;
+            rootNum.endPage = arr[index + 1] - 1 + rootPageCount;
         }
         rootArray.push(rootNum);
-
+        // }
     })
 
     console.log(rootArray)
+
+    for (let i = 0; i < rootArray.length; i++) {
+        let finish = queryData(rootArray[i].startPage, rootArray[i].endPage, data, dataArray);
+        if (!finish) {
+            break;
+        }
+    }
+    // let data = JSON.stringify(student, null, 2);
+    let data2 = JSON.stringify(dataArray, null, 2);
+    fs.writeFileSync('govPeople-'+govePdfPeriod+'.json', data2);
+
+    // 將目錄頁樹傳進查詢
 }
+
+
+function queryData(startpage, endpage, data, dataArray) {
+    console.log('startpage:', startpage);
+    console.log('endpage:', endpage);
+    // var startpage = 207;
+    // var endpage = 209;
+    if (startpage !== endpage) {
+        var detailData = ""
+        for (let page = startpage; page <= endpage; page++) {
+            // console.log(data.pages[page].content);
+            data.pages[page].content.forEach(element => {
+                // console.log(element.str);
+                detailData += element.str;
+            });
+        }
+        // console.log("■detailData:", detailData);
+        let objectData = [];
+        // console.log(detailData.indexOf('公 職 人 員 信 託 財 產 管 理 或 處 分 指 示 通 知 表'));
+        if (!!detailData.indexOf('公 職 人 員 信 託 財 產 管 理 或 處 分 指 示 通 知 表') && !!detailData.indexOf('公 職 人 員 信 託 財 產 申 報 表')) {
+            // 針對各區切塊
+            // var TotalData=[]
+            // 146期 更正申報會壞掉  因為缺項目   用trycatch 結束
+            try {
+
+
+                objectData.push({
+                    type: "個人資料",
+                    text: detailData.split("（二）")[0]
+                });
+                objectData.push(
+                    {
+                        type: "不動產",
+                        text: detailData.split("（二）")[1].split("（三）")[0]
+                    }
+                );
+                objectData.push(
+                    {
+                        type: "船舶",
+                        text: detailData.split("（三）")[1].split("（四）")[0]
+                    }
+                );
+                objectData.push(
+                    {
+                        type: "汽車",
+                        text: detailData.split("（四）")[1].split("（五）")[0]
+                    }
+                );
+                objectData.push(
+                    {
+                        type: "航空器",
+                        text: detailData.split("航空器")[1].split("（六）")[0]
+                    }
+                );
+                objectData.push(
+                    {
+                        type: "現金",
+                        text: detailData.split("（六）")[1].split("（七）")[0]
+                    }
+                );
+                objectData.push(
+                    {
+                        type: "存款",
+                        text: detailData.split("（七）")[1].split("（八）")[0]
+                    }
+                );
+                objectData.push(
+                    {
+                        type: "有價證券",
+                        text: detailData.split("（八）")[1].split("（九）")[0]
+                    }
+                );
+                objectData.push(
+                    {
+                        type: "珠寶、古董、字畫及其他具有相當價值之財產",
+                        text: detailData.split("（九）")[1].split("（十）")[0]
+                    }
+                );
+                // console.log(detailData)
+                objectData.push(
+                    {
+                        type: "債權",
+                        text: detailData.split("（十）")[1].split("（十一）")[0]
+                    }
+                );
+                objectData.push(
+                    {
+                        type: "債務",
+                        text: detailData.split("（十一）")[1].split("（十二）")[0]
+                    }
+                );
+                objectData.push(
+                    {
+                        type: "事業投資",
+                        text: detailData.split("（十二）")[1].split("（十三）")[0]
+                    }
+                );
+                objectData.push(
+                    {
+                        type: " 備 註",
+                        text: detailData.split("（十三）")[1].split("公 職 人 員 信 託 財 產 申 報 表")[0]
+                    }
+                );
+                objectData.push(
+                    {
+                        type: "公 職 人 員 信 託 財 產 申 報 表",
+                        text: detailData.split("公 職 人 員 信 託 財 產 申 報 表")[1]
+                    }
+                );
+                // console.log("objectData:", objectData);
+                // let rowData = {
+                //     name: '',
+                //     job: '',
+                //     jobLocal: '',
+                //     applyDate: '',
+                //     applyType: '',
+                //     spouse: '',
+                //     land: '', // 土地物件
+                //     build: '', // 建物物件
+                // }
+                // 將資料處理過轉出去  
+                // 一筆資料包含姓名期別及其總額及個別類
+                // rowData = sortTypePeopleData(objectData);
+
+                // https://developer.mozilla.org/zh-TW/docs/Web/JavaScript/Reference/Global_Objects/Object/assign
+                // rowData= sortTypeRealEstate(objectData);
+                let bb = Object.assign({},
+                    sortTypePeopleData(objectData),
+                    sortTypeRealEstate(objectData),
+                    sortTypeShip(objectData),
+                    sortTypeCar(objectData),
+                    sortTypeFly(objectData),
+                    sortTypeCash(objectData),
+                    sortTypeBankSavings(objectData),
+                    sortTypeStock(objectData),
+                    sortTypeOtherProperty(objectData),
+                    sortTypeClaims(objectData),
+                    sortTypeDebt(objectData),
+                    sortTypeCareerInvestment(objectData),
+                    sortTypeNote(objectData)
+                );
+                // console.log("------------:", bb);
+                // console.log("rowData", rowData);
+
+                dataArray.push(bb);
+
+
+                return true;
+            } catch (error) {
+
+
+                console.log("☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆");
+                console.log("error:", error);
+                console.log("☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆");
+                return false
+            }
+        }
+
+    } else {
+        return false;
+    }
+
+}
+function sortTypePeopleData(objectData) {
+    let name = getDataWithStringBetween("申報人姓名", "服務機關", objectData[0].text).trim();;
+    console.log("資料姓名:", name);
+    // 職稱
+    let jobTitle = getDataWithStringBetween("職稱", "申  報  日", objectData[0].text).split(".").join("").replace(/\d+/g, '').trim();
+    // console.log(jobTitle);
+    // 服務機關
+    let serviceAgency = getDataWithStringBetween("服務機關", "職稱", objectData[0].text).split(".").join("").replace(/\d+/g, '').trim();
+    // console.log(serviceAgency);
+    // 申 報 日
+    let reportDay = getDataWithStringBetween("申  報  日", "申報類別", objectData[0].text).trim();;
+    // console.log(reportDay);
+    // 申報類別 declarationCategory
+    let declarationCategory = getDataWithStringBetween("申報類別", "配  偶", objectData[0].text).trim();;
+    // console.log(declarationCategory);
+    // 配偶及其子女資料
+    let famliy = objectData[0].text.split("姓   名")[2].trim();
+    // console.log(famliy);
+    const peopleData = {
+        name: name,
+        job: jobTitle,
+        jobLocal: serviceAgency,
+        applyDate: reportDay,
+        applyType: declarationCategory,
+        spouse: famliy
+    }
+    return peopleData;
+}
+
+// 不動產
+function sortTypeRealEstate(objectData) {
+    // 按照1,2 將土地及建物分開  這邊是土地
+    let land = getDataWithStringBetween("不動產 1.土地", "2.建物", objectData[1].text);
+    // console.log("    objectData[1].text:", objectData[1].text);
+    // console.log("land:", land);
+    // 將土地及土地變動情形分開
+
+    let land1 = getDataWithStringBetween("取  得  價  額", "土             地          變             動             情             形", land)
+
+    // console.log('land1:', land1);
+    // console.log('land1:', land1.split(' '));
+    // 總面積
+
+    // 如果有價格
+    // 這邊是建物
+    //     let land =getDataWithStringBetween("不動產 1.土地","2.建物",objectData[1].text);
+    // console.log(land);
+    let building = objectData[1].text.split("2.建物")[1].replace(" ", "");
+    // console.log("building:", building);
+    // console.log("===================================");
+    const realEstate = {
+        land: land1,
+        build: building
+    }
+    return realEstate
+}
+
+function sortTypeShip(objectData) {
+    //船舶
+}
+
+function sortTypeCar(objectData) {
+    // 汽車（含大型重型機器腳踏車）
+    let car = objectData[3].text.split("取  得  價  額")[1];
+    // console.log(car);
+    // console.log("------------:",car);
+    const carData = {
+        car: car
+    }
+    return carData;
+
+}
+function sortTypeFly(objectData) {
+    // （五）航空器
+};
+function sortTypeCash(objectData) {
+    // （六）現金（指新臺幣、外幣之現金或旅行支票）（總金額：新臺幣 
+    // console.log("objectData[5].text:",objectData[5].text)
+    let cashTotal = getDataWithStringBetween("現金（指新臺幣、外幣之現金或旅行支票）（總金額：新臺幣", "元）", objectData[5].text);
+
+    // console.log(cashTotal);
+    let cashData = {
+        cash: cashTotal ? cashTotal : 0
+    }
+    return cashData;
+};
+function sortTypeBankSavings(objectData) {
+    // 去掉頁尾及頁碼
+    // 廉 政 專 刊 第 150 期
+    let newData = "";
+    // console.log("TotalData[6].text", objectData[6].text);
+    // console.log("objectData[6].text", objectData[6].text.indexOf("監察院公報 ............. 廉 政 專 刊 第 150 期 "));
+    if (objectData[6].text.indexOf("監察院公報 ............. 廉 政 專 刊 第 150 期 ") > 0) {
+        let deleTitleAndPageNum = objectData[6].text.split("監察院公報 ............. 廉 政 專 刊 第 150 期 ")[1].split(" ");
+
+        //去出頁碼
+        deleTitleAndPageNum.shift()
+        // console.log("deleTitleAndPageNum3:", deleTitleAndPageNum);
+        // console.log("deleTitleAndPageNum4:", deleTitleAndPageNum.join(" "));
+
+        newData = objectData[6].text.split("監察院公報 ............. 廉 政 專 刊 第 150 期 ")[0] + deleTitleAndPageNum.join(" ");
+        // console.log('----------1---------');
+        // console.log(newData);
+        // console.log('----------1---------');
+
+        objectData[6].text = newData
+    }
+
+    //更新回去 
+
+
+    // 將來可抽開
+
+
+    // （七）存款（指新臺幣、外幣之存款）（總金額：新臺幣 18,479,564 元）
+    let bankSavingsTotal = getDataWithStringBetween("）（總金額：", "）", objectData[6].text);
+    // console.log("bankSavingsTotal:", bankSavingsTotal);
+    let bankSavingsList = objectData[6].text.split("臺   幣   總   額 ")[1];
+    // console.log('-------------------');
+    // console.log("分割後存款帳戶:", bankSavingsList.split(" "));
+    let bankSaveingDataList = [];
+    // bankSavingsList.split(" ").forEach((data)=>{
+    //     // /6
+
+    // })
+    let saveData = {};
+    // for (let i = 0; i < bankSavingsList.split(" ").length; i++) {
+    //     let modI = i % 6
+    //     let tempData = bankSavingsList.split(" ")[i];
+    //     if (i !== 0 && modI == 0) {
+    //         bankSaveingDataList.push(JSON.parse(JSON.stringify(saveData)));
+    //         saveData = {};
+    //     }
+    //     switch (modI) {
+    //         case 0:
+    //             // 行名
+    //             saveData.bankName = tempData;
+    //             break;
+    //         case 1:
+    //             // 存款類別
+    //             saveData.saveType = tempData;
+    //             break;
+    //         case 2:
+    //             // 幣別
+    //             saveData.moneyType = tempData;
+    //             break;
+    //         case 3:
+    //             // 戶名
+    //             saveData.accountName = tempData;
+    //             break;
+    //         case 4:
+    //             // 等值外幣金額
+    //             saveData.sameOutSideValue = tempData;
+    //             break;
+    //         case 5:
+    //             // 台幣金額
+    //             saveData.twd = tempData;
+    //             break;
+
+    //     }
+
+    // }
+    bankSaveingDataList.forEach((d) => {
+        // console.log("data:", d);
+    })
+
+    // console.log('-------------------');
+    // console.log("bankSavingsList:", bankSavingsList);
+
+    let bankSavings = {
+        bankSavings: bankSavingsTotal
+    }
+    return bankSavings;
+};
+function sortTypeStock(objectData) {
+    // console.log("處理有價證券1:");
+    objectData[7].text = removeTitleAndPageNum(objectData[7]);
+    // console.log("處理有價證券2:", objectData[7].text);
+    //（八） 有價證券（總價額：新臺幣7,220元）
+    let financialSecuritiesTotal = getDataWithStringBetween("（總價額：", "）", objectData[7].text);
+    // console.log("financialSecuritiesTotal(有價證卷總價值):", financialSecuritiesTotal);
+    let stockList = getDataWithStringBetween("1.股票", "2.債券", objectData[7].text);
+
+    let stockTotalValue = getDataWithStringBetween("（總價額：", "）", stockList);
+    // console.log("stockTotalValue:", stockTotalValue);
+    // console.log("stockList:", stockList);
+    // 2.債券
+    let bondList = getDataWithStringBetween("2.債券", "3.基金受益憑證", objectData[7].text);
+    let bondTotalValue = getDataWithStringBetween("（總價額：", "）", bondList);
+    // console.log("bondTotalValue:", bondTotalValue);
+    // console.log("bondList:", bondList);
+    // 3.基金受益憑證
+    // console.log(" 3.基金受益憑證");
+    let fundList = getDataWithStringBetween("3.基金受益憑證", "4.其他有價證券", objectData[7].text);
+    let fundTotalValue = getDataWithStringBetween("（總價額：", "）", fundList);
+
+    // console.log("fundTotalValue:", fundTotalValue);
+    // console.log("fundList:", fundList);
+    // 名稱 所   有   人 受 託 投 資 機 構 單   位   數 票面價額 （單位淨值） 外 幣 幣 別 新臺幣總額或折合新臺幣總額
+    let fundData = fundList.split('新臺幣總額或折合新臺幣總額 ')[1];
+    // console.log('fundData:', fundData);
+
+    // fundData.split(' ').forEach((data)=>{
+    // })
+    const fundObject = {
+        fundName: '',
+        fundHolder: '',
+        fundBank: '',
+        fundUnit: '',
+        fundNetValue: '',
+        fundForeignCurrency: '',
+        fundTaiwanPrice: ''
+    };
+
+    // if(fundData){
+    //     let tempFoundData = fundData.split(' ').filter((e) => { return e });
+    //     // console.log('tempFoundData:', tempFoundData);
+    //     fundObjectList = [];
+    //     // console.log('tempFoundData.length', tempFoundData.length);
+    //     for (let i = 0; i < tempFoundData.length; i++) {
+    //         // console.log('tempFoundData:', tempFoundData[i]);
+    //         switch (i % 7) {
+    //             case 0:
+    //                 fundObject.fundName = tempFoundData[i];
+    //                 break;
+    //             case 1:
+    //                 fundObject.fundHolder = tempFoundData[i];
+    //                 break;
+    //             case 2:
+    //                 fundObject.fundBank = tempFoundData[i];
+    //                 break;
+    //             case 3:
+    //                 fundObject.fundUnit = tempFoundData[i];
+    //                 break;
+
+    //             case 4:
+    //                 fundObject.fundNetValue = tempFoundData[i];
+    //                 break;
+    //             case 5:
+    //                 fundObject.fundForeignCurrency = tempFoundData[i];
+    //                 break;
+    //             case 6:
+    //                 // 20191206 先不細作  資料面要再想怎麼切 還是手工處理之類的
+    //                 // 會出現黏住的情形    // { fundName: '鋒裕匯理II-新興市場債券U股李佳芬',
+    //                 fundObject.fundTaiwanPrice = tempFoundData[i];
+    //                 // if()
+    //                 if (fundObject.fundBank.replace(/[^0-9]/ig, "")) {
+    //                     // 銀行名稱 被數字吃走
+    //                     // 取出上一個明子
+    //                     // console.log('fundObjectList[fundObjectList.length-1].fundName:', fundObjectList[fundObjectList.length - 1].fundHolder);
+    //                     fundObject.fundName = fundObject.fundName.split(fundObjectList[fundObjectList.length - 1].fundHolder)[0];
+    //                     fundObject.fundHolder = fundObjectList[fundObjectList.length - 1].fundHolder;
+    //                     fundObject.fundBank = tempFoundData[i - 5];
+    //                     fundObject.fundUnit = tempFoundData[i - 4];
+    //                     fundObject.fundNetValue = tempFoundData[i - 3];
+    //                     fundObject.fundForeignCurrency = tempFoundData[i - 2];
+    //                     fundObject.fundTaiwanPrice = tempFoundData[i - 1];
+    //                     fundObjectList.push(JSON.parse(JSON.stringify(fundObject)));
+
+    //                 } else {
+    //                     fundObjectList.push(JSON.parse(JSON.stringify(fundObject)));
+    //                 }
+    //                 // fundUnit: '1,018.893', val.replace(/[^0-9]/ig,"")
+
+    //                 //清空
+    //                 fundObject.fundName = '';
+    //                 fundObject.fundHolder = '';
+    //                 fundObject.fundBank = '';
+    //                 fundObject.fundUnit = '';
+    //                 fundObject.fundNetValue = '';
+    //                 fundObject.fundForeignCurrency = '';
+    //                 fundObject.fundTaiwanPrice = '';
+
+    //                 break;
+    //         }
+    //     }
+    // }
+
+    // console.log('fundObjectList:', fundObjectList);
+    // 4.其他有價證券
+    // console.log("4.其他有價證券");
+
+    // let elseHaveValueBondList = objectData[7].text.split("4.其他有價證券")[1]
+    // let elseHaveValueBondTotalValue = getDataWithStringBetween("（總價額：", "）", elseHaveValueBondList);
+
+    // console.log("elseHaveValueBondTotalValue:", elseHaveValueBondTotalValue);
+    // console.log("elseHaveValueBondList:", elseHaveValueBondList);
+
+    let stockTotal = {
+        stock: stockTotalValue
+    }
+
+    return stockTotal;
+};
+function sortTypeOtherProperty(objectData) {
+
+
+    // console.log("珠寶、古董、字畫及其他具有相當價值之財產:");
+    objectData[8].text = removeTitleAndPageNum(objectData[8]);
+    // console.log("處理有價證券:", objectData[8].text);
+
+    // 先用2.保險將兩段資料分開
+    // console.log('objectData[8].text:', objectData[8].text.split('2.保險'));
+    let anotherData = objectData[8].text.split('2.保險');
+
+    let elseValueTotal = getDataWithStringBetween("1.珠寶、古董、字畫及其他具有相當價值之財產（", "）", anotherData[0]);
+    // console.log("elseValueTotal(珠寶、古董、字畫及其他具有相當價值之財產) 總額:", elseValueTotal);
+    // let elseValueList = anotherData[0].split("價額 ")[1];
+    // let elseValueList = anotherData[0].split("價額 ")[1];
+    let elseValueList = getDataWithStringBetween(" 價額 ", "2.保險", anotherData[0]);
+
+    // console.log("elseValueList:", elseValueList);
+    // 20190827做到保險
+    // 2.保險 保險公司 保險名稱 要保人 備註 新光人壽 新光人壽健康百分百終身健康保險 吳○倫  新光人壽 新光人壽安心久久手術醫療終身健康保 
+    // 險 吳○倫  紐約人壽 終身壽險保險 陳怡寧  紐約人壽 終身壽險保險 陳怡寧  紐約人壽 終身壽險保險 吳堂成  國泰人壽 國泰美滿人生202終身壽險 吳堂成  國泰人壽 國泰 
+    // 人壽新真安心住院醫療終身保險 吳堂成
+    // 過調備註之前
+    // console.log('sss:',anotherData[1].indexOf('空白'));
+    if (anotherData[1].split(' 備註 ')[1].indexOf('空白') >= 0) {
+        // console.log('沒有保險');
+    } else {
+        // console.log('有保險');
+        // console.log(anotherData[1].split("備註 ")[1]);
+        // console.log(anotherData[1].split("備註 ")[1].split("  "));
+        let filteredArray = anotherData[1].split("備註 ")[1].split("  ").filter((e) => { return e });
+        // console.log("filteredArray:", filteredArray);
+        // let insuranceData = filteredArray.split(" ");
+        // 保險公司 保險名稱 保險人
+
+        let insuranceList = [];
+        filteredArray.forEach((iData) => {
+            const insuranceDataJson = {
+                insuranceCom: '',
+                insuranceName: '',
+                insurancePeople: ''
+            };
+            let insuranceData = iData.split(" ");
+            insuranceDataJson.insuranceCom = insuranceData[0];
+            insuranceDataJson.insuranceName = insuranceData[1];
+            insuranceDataJson.insurancePeople = insuranceData[2];
+            insuranceList.push(insuranceDataJson)
+        })
+        // console.log('insuranceList:', insuranceList);
+    }
+
+    // console.log("insurance:",insuranceData.length);
+
+    // elseValueList.
+    let otherProperty = {
+        anotherData: anotherData
+    }
+    return otherProperty;
+
+};
+// 債權（
+function sortTypeClaims(objectData) {
+    objectData[9].text = removeTitleAndPageNum(objectData[9]);
+    // console.log("債權（:", objectData[9].text);
+    // console.log("債權總額:", getDataWithStringBetween('債權（總金額：新臺幣', '） 種類', objectData[9].text));
+    let claims = {
+        claims: getDataWithStringBetween('債權（總金額：新臺幣', '） 種類', objectData[9].text)
+    }
+    return claims
+};
+// 債務
+function sortTypeDebt(objectData) {
+    objectData[10].text = removeTitleAndPageNum(objectData[10]);
+    // console.log("）債務（:", objectData[10].text);
+    let debt = {
+        debt: objectData[10].text
+    }
+    return debt;
+};
+// 事業投資（
+function sortTypeCareerInvestment(objectData) {
+    objectData[11].text = removeTitleAndPageNum(objectData[11]);
+    // console.log("事業投資（:", objectData[11].text);
+    let careerInvestment = {
+        sortTypeCareerInvestment: objectData[11].text
+    }
+    return careerInvestment;
+};
+// 備註
+function sortTypeNote(objectData) {
+    objectData[12].text = removeTitleAndPageNum(objectData[12]);
+    // console.log("（十三）備 註 :", objectData[12].text);
+    let note = {
+        note: objectData[12].text
+    }
+    return note;
+};
+
+
+
+
+
+
 
 function removeAnotherStringinRoot(textObj) {
 
     for (let i = 0; i < 300; i++) {
         if (textObj.indexOf("監察院公報 ............. 廉 政 專 刊 第 " + i.toString() + " 期 ") > 0) {
+            govePdfPeriod = i;// 要記錄現在期別
+            console.log("有移除到東西:", govePdfPeriod, "----:", i);
             let deleTitleAndPageNum = textObj.split("監察院公報 ............. 廉 政 專 刊 第 " + i.toString() + " 期 ")[1].split(" ");
             //去出頁碼
             deleTitleAndPageNum.shift()
@@ -743,9 +1362,9 @@ app.get('/', function (req, res) {
 });
 
 
-
-
 app.listen(4444, function () {
-    processPDF();
+    // processPDF();
+    // outputJsonFile();
+    processPDFnew();
     console.log('Example app listening on port 4444!');
 });
